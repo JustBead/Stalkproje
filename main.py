@@ -1,13 +1,13 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Updater,
+    Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
     filters,
-    CallbackContext,
-    ContextTypes
+    ContextTypes,
+    CallbackContext
 )
 import random
 from datetime import datetime, timedelta
@@ -277,7 +277,8 @@ async def process_payment_method(query, user_id):
     )
 
 async def show_referral_info(query, user_id, user_data):
-    referral_link = f"https://t.me/{(await query.bot.get_me()).username}?start={user_id}"
+    bot_username = (await query.bot.get_me()).username
+    referral_link = f"https://t.me/{bot_username}?start={user_id}"
     
     await query.edit_message_text(
         "👥 Referans Programı:\n\n"
@@ -306,8 +307,8 @@ async def handle_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Lütfen geçerli bir dekont/fatura gönderin (fotoğraf veya belge).")
         return
     
-    plan = "monthly"  # Gerçek uygulamada bu kullanıcının seçiminden alınmalı
-    method = "Banka Havalesi"  # Gerçek uygulamada bu kullanıcının seçiminden alınmalı
+    plan = "monthly"
+    method = "Banka Havalesi"
     
     db.add_payment(user_id, PRICES[plan]["tl"], plan, receipt, method)
     
@@ -455,7 +456,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["admin_action"] = None
 
 def main() -> None:
-    application = Updater(TOKEN).application
+    application = Application.builder().token(TOKEN).build()
     
     # Komutlar
     application.add_handler(CommandHandler("start", start))
