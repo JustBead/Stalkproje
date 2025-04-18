@@ -1,11 +1,22 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import (
+    Updater,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    CallbackContext,
+    ContextTypes
+)
 import random
 from datetime import datetime, timedelta
 
 # Logging ayarları
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # Bot tokenını buraya ekleyin
@@ -13,7 +24,7 @@ TOKEN = "8026541050:AAEfrfEPvy3Ep5V4NSbQcw4zTJhQ89d9VmY"
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin321"
 
-# Ödeme yöntemleri (Admin panelinden eklenip kaldırılabilir)
+# Ödeme yöntemleri
 PAYMENT_METHODS = ["Banka Havalesi", "Papara", "Kripto Para"]
 
 # Fiyatlar
@@ -24,39 +35,21 @@ PRICES = {
     "yearly": {"tl": 1500, "usd": 45}
 }
 
-# Verileri saklamak için basit bir yapı
 class Database:
     def __init__(self):
-        self.users = {}  # {user_id: {"membership_end": date, "used_profiles": set(), "referrals": int}}
-        self.pending_payments = []  # {"user_id": int, "amount": float, "type": str, "receipt": str, "method": str}
+        self.users = {}
+        self.pending_payments = []
         self.fake_profiles = self.generate_realistic_turkish_profiles()
         self.admin_password = ADMIN_PASSWORD
         self.payment_methods = PAYMENT_METHODS.copy()
     
     def generate_realistic_turkish_profiles(self):
-        # 500 gerçekçi Türk kullanıcı profili
-        first_names = ["Ahmet", "Mehmet", "Ayşe", "Fatma", "Ali", "Veli", "Zeynep", "Elif", "Mustafa", "Emre", 
-                      "Berk", "Can", "Deniz", "Ece", "Furkan", "Gizem", "Hakan", "Irmak", "Jale", "Kemal"]
-        last_names = ["Yılmaz", "Kaya", "Demir", "Çelik", "Şahin", "Yıldız", "Arslan", "Koç", "Taş", "Kurt",
-                     "Aksoy", "Barış", "Ceylan", "Dal", "Erdoğan", "Fırat", "Güneş", "Hazar", "Işık", "Jandarma"]
-        
-        common_words = ["sevgili", "ask", "love", "hayat", "gece", "gunduz", "yasam", "mutlu", "huzur", "kalp",
-                       "gizem", "sır", "bilinmez", "kahve", "cay", "tatli", "acı", "mutfak", "seyahat", "macera"]
+        first_names = ["Ahmet", "Mehmet", "Ayşe", "Fatma", "Ali", "Veli", "Zeynep", "Elif", "Mustafa", "Emre"]
+        last_names = ["Yılmaz", "Kaya", "Demir", "Çelik", "Şahin", "Yıldız", "Arslan", "Koç", "Taş", "Kurt"]
         
         profiles = []
         for i in range(500):
-            # Rastgele kullanıcı adı oluşturma stratejileri
-            if random.random() < 0.3:
-                username = f"{random.choice(first_names).lower()}_{random.choice(last_names).lower()}"
-            elif random.random() < 0.6:
-                username = f"{random.choice(first_names).lower()}{random.choice(last_names).lower()}"
-            else:
-                username = f"{random.choice(common_words)}_{random.randint(10, 999)}"
-            
-            # Bazı kullanıcı adlarına nokta veya alt çizgi ekle
-            if random.random() < 0.2:
-                username = username.replace("_", ".")
-            
+            username = f"{random.choice(first_names).lower()}_{random.choice(last_names).lower()}{random.randint(1, 99)}"
             name = f"{random.choice(first_names)} {random.choice(last_names)}"
             profiles.append({"id": i+1, "username": username, "name": name})
         return profiles
@@ -76,13 +69,11 @@ class Database:
         available = [p for p in self.fake_profiles if p["id"] not in user["used_profiles"]]
         
         if not available:
-            # Tüm profiller kullanılmışsa, kullanıcının kullanılmış profiller listesini sıfırla
             user["used_profiles"] = set()
             available = self.fake_profiles.copy()
         
         selected = random.sample(available, min(count, len(available)))
         
-        # Seçilen profilleri kullanıldı olarak işaretle
         for profile in selected:
             user["used_profiles"].add(profile["id"])
         
@@ -140,15 +131,14 @@ class Database:
             return True
         return False
 
-# Global database nesnesi
 db = Database()
 
-def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_data = db.get_user(user.id)
     
     if user_data["banned"]:
-        update.message.reply_text("⛔ Hesabınız yasaklanmıştır. Admin ile iletişime geçin.")
+        await update.message.reply_text("⛔ Hesabınız yasaklanmıştır. Admin ile iletişime geçin.")
         return
     
     keyboard = [
@@ -159,72 +149,69 @@ def start(update: Update, context: CallbackContext) -> None:
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    update.message.reply_text(
+    await update.message.reply_text(
         f"👋 Merhaba {user.first_name}!\n\n"
         "📱 Bu bot ile Instagram'da seni stalklayanları görebilirsin!\n"
         "🔍 İlk sorgun ücretsiz, sonrası için üyelik satın almalısın.",
         reply_markup=reply_markup
     )
 
-def button_handler(update: Update, context: CallbackContext) -> None:
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    query.answer()
+    await query.answer()
     user_id = query.from_user.id
     user_data = db.get_user(user_id)
     
     if user_data["banned"]:
-        query.edit_message_text("⛔ Hesabınız yasaklanmıştır. Admin ile iletişime geçin.")
+        await query.edit_message_text("⛔ Hesabınız yasaklanmıştır. Admin ile iletişime geçin.")
         return
     
     if query.data == 'show_stalkers':
-        show_stalkers(query, user_id, user_data)
+        await show_stalkers(query, user_id, user_data)
     elif query.data == 'buy_membership':
-        show_membership_options(query)
+        await show_membership_options(query)
     elif query.data.startswith('membership_'):
-        process_membership_selection(query, user_id)
+        await process_membership_selection(query, user_id)
     elif query.data.startswith('payment_'):
-        process_payment_method(query, user_id)
+        await process_payment_method(query, user_id)
     elif query.data == 'referral_info':
-        show_referral_info(query, user_id, user_data)
+        await show_referral_info(query, user_id, user_data)
     elif query.data == 'back_to_menu':
-        start(update, context)
+        await start(update, context)
     elif query.data == 'admin_panel':
-        admin_panel(query)
+        await admin_panel(query)
     elif query.data == 'admin_view_payments':
-        admin_view_payments(query)
+        await admin_view_payments(query)
     elif query.data.startswith('admin_approve_'):
-        admin_process_payment(query, True)
+        await admin_process_payment(query, True)
     elif query.data.startswith('admin_reject_'):
-        admin_process_payment(query, False)
+        await admin_process_payment(query, False)
     elif query.data == 'admin_manage_payments':
-        admin_manage_payment_methods(query)
+        await admin_manage_payment_methods(query)
     elif query.data.startswith('admin_add_payment_'):
-        admin_add_payment_method(query)
+        await admin_add_payment_method(query)
     elif query.data.startswith('admin_remove_payment_'):
-        admin_remove_payment_method(query)
+        await admin_remove_payment_method(query)
     elif query.data == 'admin_ban_user':
-        query.edit_message_text("Lütfen yasaklamak istediğiniz kullanıcının ID'sini girin:")
+        await query.edit_message_text("Lütfen yasaklamak istediğiniz kullanıcının ID'sini girin:")
         context.user_data["admin_action"] = "ban"
     elif query.data == 'admin_unban_user':
-        query.edit_message_text("Lütfen yasağını kaldırmak istediğiniz kullanıcının ID'sini girin:")
+        await query.edit_message_text("Lütfen yasağını kaldırmak istediğiniz kullanıcının ID'sini girin:")
         context.user_data["admin_action"] = "unban"
     elif query.data == 'admin_change_password':
-        query.edit_message_text("Lütfen yeni admin şifresini girin:")
+        await query.edit_message_text("Lütfen yeni admin şifresini girin:")
         context.user_data["admin_action"] = "change_password"
 
-def show_stalkers(query, user_id, user_data):
-    # Kullanıcının üyeliği var mı kontrol et
+async def show_stalkers(query, user_id, user_data):
     if user_data["membership_end"] and user_data["membership_end"] > datetime.now():
-        # Üyeliği varsa
         stalkers = db.get_unused_profiles(user_id, random.randint(1, 5))
         message = "🔍 Bugün seni stalklayanlar:\n\n"
         for stalker in stalkers:
             hidden_username = stalker["username"][:2] + "*" * (len(stalker["username"]) - 2)
             message += f"👤 @{hidden_username}\n"
         
-        query.edit_message_text(message)
+        await query.edit_message_text(message)
     else:
-        # İlk sorgu ücretsiz
         if not user_data["used_profiles"]:
             stalkers = db.get_unused_profiles(user_id, random.randint(1, 5))
             message = "🎁 İlk sorgun ücretsiz! Bugün seni stalklayanlar:\n\n"
@@ -233,9 +220,9 @@ def show_stalkers(query, user_id, user_data):
                 message += f"👤 @{hidden_username}\n"
             
             message += "\n🔒 Daha fazla görmek için üyelik satın almalısın."
-            query.edit_message_text(message)
+            await query.edit_message_text(message)
         else:
-            query.edit_message_text(
+            await query.edit_message_text(
                 "⏳ İlk ücretsiz sorgunu zaten kullandın.\n"
                 "🔓 Daha fazla görmek için üyelik satın almalısın.",
                 reply_markup=InlineKeyboardMarkup([
@@ -244,7 +231,7 @@ def show_stalkers(query, user_id, user_data):
                 ])
             )
 
-def show_membership_options(query):
+async def show_membership_options(query):
     buttons = []
     for plan, prices in PRICES.items():
         text = f"{plan.capitalize()} - {prices['tl']}₺ ({prices['usd']}$)"
@@ -252,7 +239,7 @@ def show_membership_options(query):
     
     buttons.append([InlineKeyboardButton("🔙 Ana Menü", callback_data='back_to_menu')])
     
-    query.edit_message_text(
+    await query.edit_message_text(
         "💎 Üyelik Planları:\n\n"
         "📅 Günlük: 30₺ (1$)\n"
         "📆 Haftalık: 200₺ (6$)\n"
@@ -262,7 +249,7 @@ def show_membership_options(query):
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
-def process_membership_selection(query, user_id):
+async def process_membership_selection(query, user_id):
     plan = query.data.split('_')[1]
     prices = PRICES.get(plan, {})
     
@@ -272,27 +259,27 @@ def process_membership_selection(query, user_id):
     
     buttons.append([InlineKeyboardButton("🔙 Geri", callback_data='buy_membership')])
     
-    query.edit_message_text(
+    await query.edit_message_text(
         f"💳 Ödeme Yöntemi Seçin ({plan.capitalize()} - {prices['tl']}₺):\n\n"
         "Ödeme yaptıktan sonra dekontu bana gönderin.",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
-def process_payment_method(query, user_id):
+async def process_payment_method(query, user_id):
     _, plan, method = query.data.split('_', 2)
     prices = PRICES.get(plan, {})
     
-    query.edit_message_text(
+    await query.edit_message_text(
         f"✅ {plan.capitalize()} üyelik için {prices['tl']}₺ ({prices['usd']}$) tutarını "
         f"{method} ile ödeme yapın.\n\n"
         "💾 Ödeme yaptıktan sonra dekont/fatura fotoğrafını bu sohbete gönderin.\n\n"
-        "⚠️ Dekontunuzda kullanıcı ID'niz ({user_id}) mutlaka görünür olmalıdır.".format(user_id=user_id)
+        f"⚠️ Dekontunuzda kullanıcı ID'niz ({user_id}) mutlaka görünür olmalıdır."
     )
 
-def show_referral_info(query, user_id, user_data):
-    referral_link = f"https://t.me/{context.bot.username}?start={user_id}"
+async def show_referral_info(query, user_id, user_data):
+    referral_link = f"https://t.me/{(await query.bot.get_me()).username}?start={user_id}"
     
-    query.edit_message_text(
+    await query.edit_message_text(
         "👥 Referans Programı:\n\n"
         f"🔗 Referans linkin: {referral_link}\n\n"
         f"📊 Toplam referans: {user_data['referrals']}\n"
@@ -303,12 +290,12 @@ def show_referral_info(query, user_id, user_data):
         ])
     )
 
-def handle_receipt(update: Update, context: CallbackContext):
+async def handle_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user_data = db.get_user(user_id)
     
     if user_data["banned"]:
-        update.message.reply_text("⛔ Hesabınız yasaklanmıştır. Admin ile iletişime geçin.")
+        await update.message.reply_text("⛔ Hesabınız yasaklanmıştır. Admin ile iletişime geçin.")
         return
     
     if update.message.photo:
@@ -316,38 +303,35 @@ def handle_receipt(update: Update, context: CallbackContext):
     elif update.message.document:
         receipt = update.message.document.file_id
     else:
-        update.message.reply_text("Lütfen geçerli bir dekont/fatura gönderin (fotoğraf veya belge).")
+        await update.message.reply_text("Lütfen geçerli bir dekont/fatura gönderin (fotoğraf veya belge).")
         return
     
-    # Kullanıcının son seçtiği üyelik planını ve ödeme yöntemini al
-    # Bu basit örnekte son işlem olarak saklamadık, gerçek uygulamada context.user_data kullanılmalı
-    # Burada varsayılan değerler kullanıyoruz
-    plan = "monthly"
-    method = "Banka Havalesi"
+    plan = "monthly"  # Gerçek uygulamada bu kullanıcının seçiminden alınmalı
+    method = "Banka Havalesi"  # Gerçek uygulamada bu kullanıcının seçiminden alınmalı
     
     db.add_payment(user_id, PRICES[plan]["tl"], plan, receipt, method)
     
-    update.message.reply_text(
+    await update.message.reply_text(
         "✅ Dekontunuz alındı ve admin onayına gönderildi.\n\n"
         "⏳ En geç 24 saat içinde üyeliğiniz aktif edilecektir.\n"
         "📬 Onaylandığında size bildirilecektir."
     )
 
-def admin_login(update: Update, context: CallbackContext):
+async def admin_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) == 2:
         username, password = context.args
         if username == ADMIN_USERNAME and password == db.admin_password:
             context.user_data["admin_logged_in"] = True
-            update.message.reply_text("✅ Admin paneline giriş yapıldı.", reply_markup=InlineKeyboardMarkup([
+            await update.message.reply_text("✅ Admin paneline giriş yapıldı.", reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛠️ Admin Paneli", callback_data='admin_panel')]
             ]))
         else:
-            update.message.reply_text("❌ Hatalı kullanıcı adı veya şifre!")
+            await update.message.reply_text("❌ Hatalı kullanıcı adı veya şifre!")
     else:
-        update.message.reply_text("Kullanım: /justadmin <kullanıcıadı> <şifre>")
+        await update.message.reply_text("Kullanım: /justadmin <kullanıcıadı> <şifre>")
 
-def admin_panel(query):
-    query.edit_message_text(
+async def admin_panel(query):
+    await query.edit_message_text(
         "🛠️ Admin Paneli\n\n"
         "Lütfen bir işlem seçin:",
         reply_markup=InlineKeyboardMarkup([
@@ -360,11 +344,11 @@ def admin_panel(query):
         ])
     )
 
-def admin_view_payments(query):
+async def admin_view_payments(query):
     pending_payments = db.get_pending_payments()
     
     if not pending_payments:
-        query.edit_message_text("✅ Bekleyen ödeme bulunmamaktadır.")
+        await query.edit_message_text("✅ Bekleyen ödeme bulunmamaktadır.")
         return
     
     message = "📝 Bekleyen Ödemeler:\n\n"
@@ -385,64 +369,62 @@ def admin_view_payments(query):
     
     buttons.append([InlineKeyboardButton("🔙 Geri", callback_data='admin_panel')])
     
-    query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(buttons))
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(buttons))
 
-def admin_process_payment(query, approve):
+async def admin_process_payment(query, approve):
     payment_index = int(query.data.split('_')[-1])
     
     if approve:
         if db.approve_payment(payment_index):
-            query.answer("✅ Ödeme onaylandı!")
+            await query.answer("✅ Ödeme onaylandı!")
         else:
-            query.answer("❌ Onaylama başarısız!")
+            await query.answer("❌ Onaylama başarısız!")
     else:
         if db.reject_payment(payment_index):
-            query.answer("❌ Ödeme reddedildi!")
+            await query.answer("❌ Ödeme reddedildi!")
         else:
-            query.answer("❌ Reddetme başarısız!")
+            await query.answer("❌ Reddetme başarısız!")
     
-    admin_view_payments(query)
+    await admin_view_payments(query)
 
-def admin_manage_payment_methods(query):
+async def admin_manage_payment_methods(query):
     buttons = []
     
-    # Mevcut ödeme yöntemlerini listele
     for method in db.payment_methods:
         buttons.append([InlineKeyboardButton(f"❌ Kaldır: {method}", callback_data=f'admin_remove_payment_{method}')])
     
-    # Yeni ekleme butonları
     buttons.append([InlineKeyboardButton("➕ Banka Havalesi Ekle", callback_data='admin_add_payment_Banka Havalesi')])
     buttons.append([InlineKeyboardButton("➕ Papara Ekle", callback_data='admin_add_payment_Papara')])
     buttons.append([InlineKeyboardButton("➕ Kripto Para Ekle", callback_data='admin_add_payment_Kripto Para')])
     
     buttons.append([InlineKeyboardButton("🔙 Geri", callback_data='admin_panel')])
     
-    query.edit_message_text(
+    await query.edit_message_text(
         "💳 Ödeme Yöntemleri Yönetimi\n\n"
         "Mevcut yöntemler:\n- " + "\n- ".join(db.payment_methods) + "\n\n"
         "Yeni yöntem eklemek veya mevcutları kaldırmak için butonları kullanın:",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
-def admin_add_payment_method(query):
+async def admin_add_payment_method(query):
     method = query.data.split('_')[-1]
     if db.add_payment_method(method):
-        query.answer(f"✅ {method} eklendi!")
+        await query.answer(f"✅ {method} eklendi!")
     else:
-        query.answer(f"⚠️ {method} zaten mevcut!")
-    admin_manage_payment_methods(query)
+        await query.answer(f"⚠️ {method} zaten mevcut!")
+    await admin_manage_payment_methods(query)
 
-def admin_remove_payment_method(query):
+async def admin_remove_payment_method(query):
     method = '_'.join(query.data.split('_')[3:])
     if db.remove_payment_method(method):
-        query.answer(f"✅ {method} kaldırıldı!")
+        await query.answer(f"✅ {method} kaldırıldı!")
     else:
-        query.answer(f"❌ {method} bulunamadı!")
-    admin_manage_payment_methods(query)
+        await query.answer(f"❌ {method} bulunamadı!")
+    await admin_manage_payment_methods(query)
 
-def handle_admin_actions(update: Update, context: CallbackContext):
+async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("admin_logged_in"):
-        update.message.reply_text("❌ Yetkisiz erişim!")
+        await update.message.reply_text("❌ Yetkisiz erişim!")
         return
     
     action = context.user_data.get("admin_action")
@@ -453,42 +435,40 @@ def handle_admin_actions(update: Update, context: CallbackContext):
             user_id = int(text)
             user_data = db.get_user(user_id)
             user_data["banned"] = True
-            update.message.reply_text(f"✅ Kullanıcı {user_id} yasaklandı!")
+            await update.message.reply_text(f"✅ Kullanıcı {user_id} yasaklandı!")
         except ValueError:
-            update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
+            await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
     
     elif action == "unban":
         try:
             user_id = int(text)
             user_data = db.get_user(user_id)
             user_data["banned"] = False
-            update.message.reply_text(f"✅ Kullanıcı {user_id} yasağı kaldırıldı!")
+            await update.message.reply_text(f"✅ Kullanıcı {user_id} yasağı kaldırıldı!")
         except ValueError:
-            update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
+            await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
     
     elif action == "change_password":
         db.admin_password = text
-        update.message.reply_text("✅ Admin şifresi güncellendi!")
+        await update.message.reply_text("✅ Admin şifresi güncellendi!")
     
     context.user_data["admin_action"] = None
 
-def main():
-    updater = Updater(TOKEN)
-    dispatcher = updater.dispatcher
+def main() -> None:
+    application = Updater(TOKEN).application
     
     # Komutlar
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("justadmin", admin_login))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("justadmin", admin_login))
     
     # Butonlar
-    dispatcher.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(CallbackQueryHandler(button_handler))
     
     # Mesajlar
-    dispatcher.add_handler(MessageHandler(Filters.photo | Filters.document, handle_receipt))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_admin_actions))
+    application.add_handler(MessageHandler(filters.PHOTO | filters.DOCUMENT, handle_receipt))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_actions))
     
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
